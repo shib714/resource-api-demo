@@ -1,12 +1,12 @@
 import { Component, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Nav } from './common/nav/nav';
 
 @Component({
-  imports: [RouterOutlet],
+  imports: [Nav],
   selector: 'app-root',
   styleUrl: './app.scss',
-  templateUrl: './app.html',
+  template: '<app-nav></app-nav>',
 })
 export class App {
-  protected readonly title = signal('resource-api-demo');
+  protected readonly title = signal('Resource API Explorer');
 }
