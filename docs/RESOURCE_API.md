@@ -80,6 +80,7 @@ The object returned by `resource()` exposes the following reactive signals and i
 ## 5. Complete Implementation Reference
 
 ### TypeScript Component: [`product-list.ts`](../src/app/products/resource-example/product-list/product-list.ts)
+### 1. Service Layer: [`product.service.ts`](../src/app/products/product.service.ts)
 
 ```typescript
 import { ChangeDetectionStrategy, Component, resource, signal } from '@angular/core';
@@ -91,6 +92,8 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Product, ProductResponse } from '../../product';
 import { ProductCard } from '../product-card/product-card';
+import { Injectable } from '@angular/core';
+import { ProductResponse } from './product';
 
 @Component({
   selector: 'product-list',
@@ -98,6 +101,59 @@ import { ProductCard } from '../product-card/product-card';
     ProductCard,
     MatIconModule,
 import { ChangeDetectionStrategy, Component, resource, signal } from '@angular/core';
+export interface ProductQueryParams {
+  searchTerm: string;
+  pageIndex: number;
+  pageSize: number;
+}
+
+@Injectable({
+  providedIn: 'root',
+})
+export class ProductService {
+  private readonly baseUrl = 'https://dummyjson.com/products';
+
+  /**
+   * Fetches paginated products with optional search query from the API.
+   *
+   * @param params - Search term and pagination options.
+   * @param abortSignal - Standard AbortSignal forwarded from Angular resource() for auto-cancellation.
+   */
+  async getProducts(
+    params: ProductQueryParams,
+    abortSignal?: AbortSignal,
+  ): Promise<ProductResponse> {
+    const query = params.searchTerm.trim();
+    const limit = params.pageSize;
+    const skip = params.pageIndex * params.pageSize;
+
+    const endpoint = query
+      ? `${this.baseUrl}/search?q=${encodeURIComponent(query)}&limit=${limit}&skip=${skip}`
+      : `${this.baseUrl}?limit=${limit}&skip=${skip}`;
+
+    const response = await fetch(endpoint, { signal: abortSignal });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch products: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    return await response.json();
+  }
+}
+```
+
+### 2. Component Layer: [`product-list.ts`](../src/app/products/resource-example/product-list/product-list.ts)
+
+```typescript
+import {
+  ChangeDetectionStrategy,
+  Component,
+  inject,
+  resource,
+  signal,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -106,6 +162,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ProductResponse } from '../../product';
+import { ProductQueryParams, ProductService } from '../../product.service';
 import { ProductCard } from '../product-card/product-card';
 
 @Component({
@@ -126,12 +183,19 @@ import { ProductCard } from '../product-card/product-card';
 })
 export class ProductList {
   protected readonly url = 'https://dummyjson.com/products';
+  // 1. Inject dedicated API Service
+  private readonly productService = inject(ProductService);
+
+  // 2. Reactive UI State Signals
   protected readonly searchTerm = signal('');
   protected readonly pageIndex = signal(0);
   protected readonly pageSize = signal(12);
+  protected readonly pageSize = signal(10);
 
   // 1. Declare Resource with multi-signal reactive parameters
   products = resource<ProductResponse, { searchTerm: string; pageIndex: number; pageSize: number }>({
+  // 3. Declare Resource coordinating async data fetching with the service
+  products = resource<ProductResponse, ProductQueryParams>({
     params: () => ({
       searchTerm: this.searchTerm(),
       pageIndex: this.pageIndex(),
@@ -157,6 +221,8 @@ export class ProductList {
 
       return await response.json();
     },
+    loader: ({ params, abortSignal }) =>
+      this.productService.getProducts(params, abortSignal),
   });
 
   protected onSearchChange(value: string) {

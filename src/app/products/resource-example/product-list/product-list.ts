@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  inject,
   resource,
   signal,
 } from '@angular/core';
@@ -12,6 +13,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ProductResponse } from '../../product';
+import { ProductQueryParams, ProductService } from '../../product.service';
 import { ProductCard } from '../product-card/product-card';
 
 @Component({
@@ -100,6 +102,7 @@ import { ProductCard } from '../product-card/product-card';
 })
 export class ProductList {
   protected readonly url = 'https://dummyjson.com/products';
+  private readonly productService = inject(ProductService);
 
   /**
    * Reactive state signals for filtering and pagination.
@@ -115,6 +118,7 @@ export class ProductList {
     ProductResponse,
     { searchTerm: string; pageIndex: number; pageSize: number }
   >({
+  products = resource<ProductResponse, ProductQueryParams>({
     // Automatically re-evaluates and triggers the loader whenever any of these signals change:
     params: () => ({
       searchTerm: this.searchTerm(),
@@ -140,6 +144,8 @@ export class ProductList {
 
       return await response.json();
     },
+    loader: ({ params, abortSignal }) =>
+      this.productService.getProducts(params, abortSignal),
   });
 
   protected onSearchChange(value: string) {
