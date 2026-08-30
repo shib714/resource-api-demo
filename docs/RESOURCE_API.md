@@ -97,11 +97,28 @@ import { ProductCard } from '../product-card/product-card';
   imports: [
     ProductCard,
     MatIconModule,
+import { ChangeDetectionStrategy, Component, resource, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { ProductResponse } from '../../product';
+import { ProductCard } from '../product-card/product-card';
+
+@Component({
+  selector: 'product-list',
+  imports: [
+    ProductCard,
+    MatIconModule,
     MatInputModule,
     FormsModule,
     MatFormFieldModule,
     MatButtonModule,
     MatProgressSpinnerModule,
+    MatPaginatorModule,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './product-list.html',
@@ -110,17 +127,26 @@ import { ProductCard } from '../product-card/product-card';
 export class ProductList {
   protected readonly url = 'https://dummyjson.com/products';
   protected readonly searchTerm = signal('');
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(12);
 
-  // 1. Declare Resource
-  products = resource<Product[], { searchTerm: string }>({
-    params: () => ({ searchTerm: this.searchTerm() }),
+  // 1. Declare Resource with multi-signal reactive parameters
+  products = resource<ProductResponse, { searchTerm: string; pageIndex: number; pageSize: number }>({
+    params: () => ({
+      searchTerm: this.searchTerm(),
+      pageIndex: this.pageIndex(),
+      pageSize: this.pageSize(),
+    }),
     loader: async ({ params, abortSignal }) => {
       const query = params.searchTerm.trim();
-      const endpoint = query
-        ? `${this.url}/search?q=${encodeURIComponent(query)}`
-        : this.url;
+      const limit = params.pageSize;
+      const skip = params.pageIndex * params.pageSize;
 
-      // 2. Pass abortSignal to fetch
+      const endpoint = query
+        ? `${this.url}/search?q=${encodeURIComponent(query)}&limit=${limit}&skip=${skip}`
+        : `${this.url}?limit=${limit}&skip=${skip}`;
+
+      // 2. Pass abortSignal to fetch for auto-cancellation
       const response = await fetch(endpoint, { signal: abortSignal });
 
       if (!response.ok) {
@@ -129,13 +155,23 @@ export class ProductList {
         );
       }
 
-      const data: ProductResponse = await response.json();
-      return data.products;
+      return await response.json();
     },
   });
 
+  protected onSearchChange(value: string) {
+    this.searchTerm.set(value);
+    this.pageIndex.set(0); // Reset page on search change
+  }
+
+  protected onPageChange(event: PageEvent) {
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
+  }
+
   protected clearSearch() {
     this.searchTerm.set('');
+    this.pageIndex.set(0);
   }
 }
 ```
@@ -147,7 +183,12 @@ export class ProductList {
   <!-- Search Input -->
   <mat-form-field appearance="outline" class="search-field">
     <mat-label>Search Products</mat-label>
-    <input matInput [(ngModel)]="searchTerm" placeholder="e.g. mascara, phone, perfume" />
+    <input
+      matInput
+      [ngModel]="searchTerm()"
+      (ngModelChange)="onSearchChange($event)"
+      placeholder="e.g. mascara, phone, perfume"
+    />
     @if (searchTerm()) {
       <button mat-icon-button matSuffix (click)="clearSearch()" aria-label="Clear search">
         <mat-icon>close</mat-icon>
@@ -172,10 +213,10 @@ export class ProductList {
     </div>
   }
 
-  <!-- State 3: Resolved Data -->
+  <!-- State 3: Resolved Data Grid & Paginator -->
   @else {
     <div class="products-grid">
-      @for (product of products.value(); track product.id) {
+      @for (product of products.value()?.products; track product.id) {
         <product-card [product]="product" />
       } @empty {
         <div class="empty-state">
@@ -184,6 +225,19 @@ export class ProductList {
         </div>
       }
     </div>
+
+    @if ((products.value()?.total ?? 0) > 0) {
+      <mat-paginator
+        [length]="products.value()?.total ?? 0"
+        [pageSize]="pageSize()"
+        [pageIndex]="pageIndex()"
+        [pageSizeOptions]="[6, 12, 24, 48]"
+        [showFirstLastButtons]="true"
+        (page)="onPageChange($event)"
+        aria-label="Select page of products"
+      >
+      </mat-paginator>
+    }
   }
 </div>
 ```
