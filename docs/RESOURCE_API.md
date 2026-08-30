@@ -1,6 +1,6 @@
 # Angular Resource API Guide (`resource()`)
 
-This document provides a comprehensive guide and reference for the **Resource API (`resource()`)** in Angular, featuring the implementation in [`ProductList`](../src/app/products/resource-example/product-list/product-list.ts).
+This document provides a comprehensive guide, architecture overview, and reference for the **Resource API (`resource()`)** in Angular, featuring the **Facade / Feature Store** pattern implemented in this project.
 
 ---
 
@@ -8,11 +8,11 @@ This document provides a comprehensive guide and reference for the **Resource AP
 
 The `resource()` API is a declarative, signal-first bridge designed to coordinate asynchronous data fetching with Angular's reactive signal graph.
 
-### Why Use `resource()`?
+### Core Value Proposition
 * **Declarative Reactivity**: Automatically initiates and re-triggers data fetches when input signals change.
 * **Unified State**: Consolidates `value`, `isLoading`, `error`, and `status` into a single reactive object without managing separate signals manually.
-* **Automatic Race Condition & Cancellation Handling**: Provides a standard DOM `AbortSignal` to cancel in-flight requests when parameters change rapidly or when the component is destroyed.
-* **Zero Boilerplate**: Eliminates the need for manual `takeUntilDestroyed()`, RxJS subscription management, or `async` pipe overhead.
+* **Automatic Cancellation & Race Condition Protection**: Integrates standard DOM `AbortSignal` to cancel stale in-flight requests when parameters change rapidly or when components unmount.
+* **Zero Subscription Boilerplate**: Eliminates the need for manual `takeUntilDestroyed()`, RxJS subscription management, or `async` pipe unwrapping.
 
 ---
 
@@ -28,8 +28,8 @@ const myResource: ResourceRef<T> = resource<T, P>({
 ```
 
 ### Type Parameters
-* **`T` (`Product[]`)**: The resolved data payload type.
-* **`P` (`{ searchTerm: string }`)**: The parameter payload type computed from dependent signals.
+* **`T` (`ProductResponse`)**: The resolved data payload type.
+* **`P` (`ProductQueryParams`)**: The parameter payload type computed from dependent signals.
 
 ---
 
@@ -37,7 +37,7 @@ const myResource: ResourceRef<T> = resource<T, P>({
 
 ### `params` (or `request`)
 A reactive computation function (similar to `computed()`).
-* **Dependency Tracking**: Tracks any signals read within its execution body (e.g., `this.searchTerm()`).
+* **Dependency Tracking**: Tracks all signals read within its execution body (e.g. `this.searchTerm()`, `this.pageIndex()`, `this.pageSize()`).
 * **Trigger Mechanism**: Whenever any tracked signal emits a new value, `params` is re-evaluated and the `loader` is invoked with the new parameters.
 * **Idle State**: If `params` returns `undefined`, the resource enters an `Idle` state without executing the loader.
 
@@ -62,45 +62,68 @@ The object returned by `resource()` exposes the following reactive signals and i
 ### Signals (Read-Only)
 | Member | Type | Description |
 | :--- | :--- | :--- |
-| `products.value()` | `Signal<T \| undefined>` | The current resolved data. Returns `undefined` before the first successful fetch. |
-| `products.isLoading()` | `Signal<boolean>` | `true` while the resource is performing an initial fetch or reloading. |
-| `products.error()` | `Signal<unknown>` | Contains the error or exception thrown during `loader` execution (`undefined` if no error). |
-| `products.status()` | `Signal<ResourceStatus>` | Fine-grained status enum: `Idle`, `Loading`, `Resolved`, `Error`, `Reloading`, `Local`. |
+| `resource.value()` | `Signal<T \| undefined>` | The current resolved data. Returns `undefined` before the first successful fetch. |
+| `resource.isLoading()` | `Signal<boolean>` | `true` while the resource is performing an initial fetch or reloading. |
+| `resource.error()` | `Signal<unknown>` | Contains the error or exception thrown during `loader` execution (`undefined` if no error). |
+| `resource.status()` | `Signal<ResourceStatus>` | Fine-grained status enum: `Idle`, `Loading`, `Resolved`, `Error`, `Reloading`, `Local`. |
 
 ### Imperative Methods
 | Method | Signature | Description |
 | :--- | :--- | :--- |
-| `products.reload()` | `() => boolean` | Imperatively forces the loader to re-fetch data with current parameters (useful for "Retry" buttons). |
-| `products.set(val)` | `(value: T) => void` | Manually updates the local value without invoking the `loader`. |
-| `products.update(fn)` | `(updater: (prev: T) => T) => void` | Updates the local value based on current value (useful for optimistic UI updates). |
-| `products.destroy()` | `() => void` | Cancels any pending loaders and disposes of the resource. |
+| `resource.reload()` | `() => boolean` | Imperatively forces the loader to re-fetch data with current parameters (useful for "Retry" buttons). |
+| `resource.set(val)` | `(value: T) => void` | Manually updates the local value without invoking the `loader`. |
+| `resource.update(fn)` | `(updater: (prev: T) => T) => void` | Updates the local value based on current value (useful for optimistic UI updates). |
+| `resource.destroy()` | `() => void` | Cancels any pending loaders and disposes of the resource. |
 
 ---
 
-## 5. Complete Implementation Reference
+## 5. Architectural Patterns for Scaling
 
-### TypeScript Component: [`product-list.ts`](../src/app/products/resource-example/product-list/product-list.ts)
-### 1. Service Layer: [`product.service.ts`](../src/app/products/product.service.ts)
+```mermaid
+graph TD
+    subgraph UI Consumers
+        NavComp["Navbar (Badge / Count)"]
+        ProductListComp["ProductList (Grid & Paginator)"]
+    end
+
+    subgraph Store Layer ["ProductStore (Facade / Feature Store)"]
+        StateSignals["State Signals:<br/>searchTerm, pageIndex, pageSize"]
+        ResourceRef["Resource Instance:<br/>productsResource (resource())"]
+        Selectors["Selectors:<br/>products, total, isLoading, error"]
+        Actions["Actions:<br/>setSearchTerm(), setPage(), clearSearch(), reload()"]
+    end
+
+    subgraph API Layer ["ProductService"]
+        FetchMethod["getProducts(params, abortSignal)"]
+    end
+
+    NavComp -->|reads total| Selectors
+    ProductListComp -->|reads products, total, isLoading| Selectors
+    ProductListComp -->|dispatches actions| Actions
+    StateSignals -->|triggers| ResourceRef
+    ResourceRef -->|calls| FetchMethod
+```
+
+### Comparing Pattern 1 vs. Pattern 2
+
+| Dimension | Pattern 1: Component-Scoped Resource | Pattern 2: Facade / Feature Store (Implemented) |
+| :--- | :--- | :--- |
+| **State Ownership** | Inside Component class (`ProductList`). | Inside Shared Store Service (`ProductStore`). |
+| **State Lifecycle** | State is destroyed when navigating away. | State is preserved across routes & component navigation. |
+| **Multi-Component Sharing** | Difficult; requires `@Input()` / `@Output()` chains. | Effortless; any component injects `ProductStore`. |
+| **Component Complexity** | Component manages state signals + data access. | Component is purely presentational ("dumb" UI). |
+| **Testability** | Test must configure component + mock services. | Store can be tested as a plain TypeScript class. |
+
+---
+
+## 6. Complete Implementation Reference
+
+### 1. Data Access Layer: [`product.service.ts`](../src/app/products/product.service.ts)
 
 ```typescript
-import { ChangeDetectionStrategy, Component, resource, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { Product, ProductResponse } from '../../product';
-import { ProductCard } from '../product-card/product-card';
 import { Injectable } from '@angular/core';
 import { ProductResponse } from './product';
 
-@Component({
-  selector: 'product-list',
-  imports: [
-    ProductCard,
-    MatIconModule,
-import { ChangeDetectionStrategy, Component, resource, signal } from '@angular/core';
 export interface ProductQueryParams {
   searchTerm: string;
   pageIndex: number;
@@ -115,9 +138,6 @@ export class ProductService {
 
   /**
    * Fetches paginated products with optional search query from the API.
-   *
-   * @param params - Search term and pagination options.
-   * @param abortSignal - Standard AbortSignal forwarded from Angular resource() for auto-cancellation.
    */
   async getProducts(
     params: ProductQueryParams,
@@ -144,16 +164,70 @@ export class ProductService {
 }
 ```
 
-### 2. Component Layer: [`product-list.ts`](../src/app/products/resource-example/product-list/product-list.ts)
+### 2. Facade Store Layer: [`product.store.ts`](../src/app/products/product.store.ts)
 
 ```typescript
-import {
-  ChangeDetectionStrategy,
-  Component,
-  inject,
-  resource,
-  signal,
-} from '@angular/core';
+import { computed, inject, Injectable, resource, signal } from '@angular/core';
+import { ProductResponse } from './product';
+import { ProductQueryParams, ProductService } from './product.service';
+
+@Injectable({
+  providedIn: 'root',
+})
+export class ProductStore {
+  private readonly productService = inject(ProductService);
+
+  // 1. Reactive State Signals
+  readonly searchTerm = signal('');
+  readonly pageIndex = signal(0);
+  readonly pageSize = signal(10);
+
+  // 2. Resource managed centrally by the Store
+  readonly productsResource = resource<ProductResponse, ProductQueryParams>({
+    params: () => ({
+      searchTerm: this.searchTerm(),
+      pageIndex: this.pageIndex(),
+      pageSize: this.pageSize(),
+    }),
+    loader: ({ params, abortSignal }) =>
+      this.productService.getProducts(params, abortSignal),
+  });
+
+  // 3. Computed Selectors
+  readonly products = computed(
+    () => this.productsResource.value()?.products ?? [],
+  );
+  readonly total = computed(
+    () => this.productsResource.value()?.total ?? 0,
+  );
+  readonly isLoading = this.productsResource.isLoading;
+  readonly error = this.productsResource.error;
+
+  // 4. Action Methods
+  setSearchTerm(term: string): void {
+    this.searchTerm.set(term);
+    this.pageIndex.set(0);
+  }
+
+  setPage(pageIndex: number, pageSize: number): void {
+    this.pageIndex.set(pageIndex);
+    this.pageSize.set(pageSize);
+  }
+
+  clearSearch(): void {
+    this.setSearchTerm('');
+  }
+
+  reload(): void {
+    this.productsResource.reload();
+  }
+}
+```
+
+### 3. Component Layer: [`product-list.ts`](../src/app/products/resource-example/product-list/product-list.ts)
+
+```typescript
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -161,8 +235,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { ProductResponse } from '../../product';
-import { ProductQueryParams, ProductService } from '../../product.service';
+import { ProductStore } from '../../product.store';
 import { ProductCard } from '../product-card/product-card';
 
 @Component({
@@ -182,67 +255,16 @@ import { ProductCard } from '../product-card/product-card';
   styleUrl: './product-list.scss',
 })
 export class ProductList {
-  protected readonly url = 'https://dummyjson.com/products';
-  // 1. Inject dedicated API Service
-  private readonly productService = inject(ProductService);
-
-  // 2. Reactive UI State Signals
-  protected readonly searchTerm = signal('');
-  protected readonly pageIndex = signal(0);
-  protected readonly pageSize = signal(12);
-  protected readonly pageSize = signal(10);
-
-  // 1. Declare Resource with multi-signal reactive parameters
-  products = resource<ProductResponse, { searchTerm: string; pageIndex: number; pageSize: number }>({
-  // 3. Declare Resource coordinating async data fetching with the service
-  products = resource<ProductResponse, ProductQueryParams>({
-    params: () => ({
-      searchTerm: this.searchTerm(),
-      pageIndex: this.pageIndex(),
-      pageSize: this.pageSize(),
-    }),
-    loader: async ({ params, abortSignal }) => {
-      const query = params.searchTerm.trim();
-      const limit = params.pageSize;
-      const skip = params.pageIndex * params.pageSize;
-
-      const endpoint = query
-        ? `${this.url}/search?q=${encodeURIComponent(query)}&limit=${limit}&skip=${skip}`
-        : `${this.url}?limit=${limit}&skip=${skip}`;
-
-      // 2. Pass abortSignal to fetch for auto-cancellation
-      const response = await fetch(endpoint, { signal: abortSignal });
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch products: ${response.status} ${response.statusText}`,
-        );
-      }
-
-      return await response.json();
-    },
-    loader: ({ params, abortSignal }) =>
-      this.productService.getProducts(params, abortSignal),
-  });
-
-  protected onSearchChange(value: string) {
-    this.searchTerm.set(value);
-    this.pageIndex.set(0); // Reset page on search change
-  }
+  // Inject the Store Facade
+  protected readonly store = inject(ProductStore);
 
   protected onPageChange(event: PageEvent) {
-    this.pageIndex.set(event.pageIndex);
-    this.pageSize.set(event.pageSize);
-  }
-
-  protected clearSearch() {
-    this.searchTerm.set('');
-    this.pageIndex.set(0);
+    this.store.setPage(event.pageIndex, event.pageSize);
   }
 }
 ```
 
-### HTML Template:
+### 4. HTML Template:
 
 ```html
 <div class="products-container">
@@ -251,19 +273,19 @@ export class ProductList {
     <mat-label>Search Products</mat-label>
     <input
       matInput
-      [ngModel]="searchTerm()"
-      (ngModelChange)="onSearchChange($event)"
+      [ngModel]="store.searchTerm()"
+      (ngModelChange)="store.setSearchTerm($event)"
       placeholder="e.g. mascara, phone, perfume"
     />
-    @if (searchTerm()) {
-      <button mat-icon-button matSuffix (click)="clearSearch()" aria-label="Clear search">
+    @if (store.searchTerm()) {
+      <button mat-icon-button matSuffix (click)="store.clearSearch()" aria-label="Clear search">
         <mat-icon>close</mat-icon>
       </button>
     }
   </mat-form-field>
 
   <!-- State 1: Loading -->
-  @if (products.isLoading()) {
+  @if (store.isLoading()) {
     <div class="loading-state">
       <mat-spinner diameter="48"></mat-spinner>
       <p>Loading products...</p>
@@ -271,18 +293,18 @@ export class ProductList {
   }
 
   <!-- State 2: Error with Retry -->
-  @else if (products.error()) {
+  @else if (store.error()) {
     <div class="error-state">
       <mat-icon>error_outline</mat-icon>
       <p>Failed to load products</p>
-      <button mat-flat-button (click)="products.reload()">Retry</button>
+      <button mat-flat-button (click)="store.reload()">Retry</button>
     </div>
   }
 
   <!-- State 3: Resolved Data Grid & Paginator -->
   @else {
     <div class="products-grid">
-      @for (product of products.value()?.products; track product.id) {
+      @for (product of store.products(); track product.id) {
         <product-card [product]="product" />
       } @empty {
         <div class="empty-state">
@@ -292,12 +314,12 @@ export class ProductList {
       }
     </div>
 
-    @if ((products.value()?.total ?? 0) > 0) {
+    @if (store.total() > 0) {
       <mat-paginator
-        [length]="products.value()?.total ?? 0"
-        [pageSize]="pageSize()"
-        [pageIndex]="pageIndex()"
-        [pageSizeOptions]="[6, 12, 24, 48]"
+        [length]="store.total()"
+        [pageSize]="store.pageSize()"
+        [pageIndex]="store.pageIndex()"
+        [pageSizeOptions]="[5, 10, 15, 20]"
         [showFirstLastButtons]="true"
         (page)="onPageChange($event)"
         aria-label="Select page of products"
@@ -310,13 +332,18 @@ export class ProductList {
 
 ---
 
-## 6. Comparison: `resource` vs `httpResource` vs `rxResource`
+## 7. Reasoning & Architectural Benefits
 
-| Feature | `resource()` | `httpResource()` | `rxResource()` |
-| :--- | :--- | :--- | :--- |
-| **Package** | `@angular/core` | `@angular/common/http` | `@angular/core/rxjs-interop` |
-| **Async Mechanism** | `Promise` / `fetch` | Angular `HttpClient` | RxJS `Observable` |
-| **Interceptors Support** | Manual | Automatic via `HttpClient` | Automatic if using `HttpClient` |
-| **Cancellation** | via `AbortSignal` | Automatic on parameter change | Automatic via RxJS unsubscribe |
-| **Best For** | Generic Promises, `fetch`, SDKs | Standard REST endpoints in Angular apps | Complex event streams, debouncing, polling |
+### 1. Persistent State Across Routing
+* When navigating from `/product-list` to `/home` and back, the user's active page, search query, and loaded product cache remain intact without triggering unnecessary HTTP round-trips.
 
+### 2. High Cohesion & Loose Coupling
+* Components focus strictly on HTML presentation and DOM events.
+* Data access rules, URL schemes, and backend contracts are isolated to `ProductService`.
+* Application state, caching, pagination, and search policies are unified in `ProductStore`.
+
+### 3. Cross-Component Interoperability
+* Sibling components (such as [`Nav`](../src/app/common/nav/nav.ts) displaying total count badges) consume `ProductStore` without complex event passing or duplicate API requests.
+
+### 4. Direct Support for Angular's OnPush Strategy
+* All selectors (`products()`, `total()`, `isLoading()`, `error()`) are native signals, ensuring minimal, localized DOM repaints under `ChangeDetectionStrategy.OnPush`.
