@@ -28,5 +28,13 @@ export const routes: Routes = [
         ).then((m) => m.RxProductList),
       title: 'RxResource: Product List',
   },
+  {
+    path: 'http-product-list',
+    loadComponent: () =>
+      import(
+        './products/http-resource-example/http-product-list/http-product-list'
+      ).then((m) => m.HttpProductList),
+    title: 'HttpResource: Product List',
+  },
 
 ];

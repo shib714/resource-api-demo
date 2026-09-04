@@ -1,0 +1,38 @@
+.product-card {
+  height: 100%;
+}
+
+.product-image {
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  padding: 1rem;
+}
+
+.description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.price-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.current-price {
+  font-weight: 600;
+}
+
+.sale-badge {
+  color: var(--mat-sys-error, #ba1a1a);
+  font-weight: 600;
+}
+
+.availability {
+  flex-basis: 100%;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.875rem;
+}
