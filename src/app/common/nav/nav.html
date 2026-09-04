@@ -48,6 +48,20 @@
       <mat-divider></mat-divider>
     </mat-list>
 
+    <mat-list role="list">
+      <mat-list-item routerLink="rx-product-list" routerLinkActive="active">
+        <mat-icon>inventory_2</mat-icon>
+        <span>rx-resource: Products</span>
+        @if (productStore.total() > 0) {
+          <span
+            [matBadge]="productStore.total()"
+            matBadgeColor="accent"
+            matBadgeOverlap="false"
+          ></span>
+        }
+      </mat-list-item>
+      <mat-divider></mat-divider>
+    </mat-list>
   </mat-drawer>
   <mat-drawer-content class="app-container" (click)="drawer.close()">
     <main class="app-content">
