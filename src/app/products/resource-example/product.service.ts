@@ -20,7 +20,10 @@ export class ProductService {
    * @param params - Search term and pagination options (pageIndex, pageSize).
    * @param abortSignal - Standard AbortSignal forwarded from Angular's resource() for auto-cancellation.
    */
-  async getProducts(params: ProductQueryParams,abortSignal?: AbortSignal,): Promise<ProductResponse> {
+  async getProducts(
+       params: ProductQueryParams,
+       abortSignal?: AbortSignal,
+    ): Promise<ProductResponse> {
     const query = params.searchTerm.trim();
     const limit = params.pageSize;
     const skip = params.pageIndex * params.pageSize;
