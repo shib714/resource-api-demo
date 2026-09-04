@@ -24,7 +24,7 @@ export const routes: Routes = [
     path: 'rx-product-list',
     loadComponent: () =>
       import(
-        './products/rxresource-example/rx-product-list'
+        './products/resource-example/product-list/product-list'
       ).then((m) => m.ProductList),
     title: 'Resource: Product List',
   },
