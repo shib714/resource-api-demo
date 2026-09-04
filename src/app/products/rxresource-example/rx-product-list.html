@@ -1,0 +1,61 @@
+<div class="products-container">
+  <!-- Search Input -->
+  <mat-form-field appearance="outline" class="search-field">
+    <mat-label>Search Products</mat-label>
+    <input
+      matInput
+      [ngModel]="store.searchTerm()"
+      (ngModelChange)="store.setSearchTerm($event)"
+      placeholder="e.g. mascara, phone, perfume"
+    />
+    @if (store.searchTerm()) {
+      <button mat-icon-button matSuffix (click)="store.clearSearch()" aria-label="Clear search">
+        <mat-icon>close</mat-icon>
+      </button>
+    }
+  </mat-form-field>
+
+  <!-- State 1: Loading -->
+  @if (store.isLoading()) {
+    <div class="loading-state">
+      <mat-spinner diameter="48"></mat-spinner>
+      <p>Loading products...</p>
+    </div>
+  }
+
+  <!-- State 2: Error with Retry -->
+  @else if (store.error()) {
+    <div class="error-state">
+      <mat-icon>error_outline</mat-icon>
+      <p>Failed to load products</p>
+      <button mat-flat-button (click)="store.reload()">Retry</button>
+    </div>
+  }
+
+  <!-- State 3: Resolved Data Grid & Paginator -->
+  @else {
+    <div class="products-grid">
+      @for (product of store.products(); track product.id) {
+        <product-card [product]="product" />
+      } @empty {
+        <div class="empty-state">
+          <mat-icon>inventory_2</mat-icon>
+          <p>No products match your search</p>
+        </div>
+      }
+    </div>
+
+    @if (store.total() > 0) {
+      <mat-paginator
+        [length]="store.total()"
+        [pageSize]="store.pageSize()"
+        [pageIndex]="store.pageIndex()"
+        [pageSizeOptions]="[5, 10, 15, 20]"
+        [showFirstLastButtons]="true"
+        (page)="onPageChange($event)"
+        aria-label="Select page of products"
+      >
+      </mat-paginator>
+    }
+  }
+</div>
