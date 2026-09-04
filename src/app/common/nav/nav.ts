@@ -8,7 +8,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { RouterLink, RouterOutlet } from '@angular/router';
-import { ProductStore } from '../../products/product.store';
+import { ProductStore } from '../../products/resource-example/product.store';
 import { Theme } from '../theme';
 
 @Component({

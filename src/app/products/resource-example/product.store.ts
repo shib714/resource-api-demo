@@ -1,5 +1,5 @@
 import { computed, inject, Injectable, resource, signal } from '@angular/core';
-import { ProductResponse } from './product';
+import { ProductResponse } from '../product';
 import { ProductQueryParams, ProductService } from './product.service';
 
 /**

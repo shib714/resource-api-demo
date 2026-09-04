@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
-import { ProductResponse } from './product';
+import { ProductResponse } from '../product';
+
 
 export interface ProductQueryParams {
   searchTerm: string;

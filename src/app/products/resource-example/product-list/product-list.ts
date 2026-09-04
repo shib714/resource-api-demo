@@ -6,7 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { ProductStore } from '../../product.store';
+import { ProductStore } from '../product.store';
 import { ProductCard } from '../product-card/product-card';
 
 @Component({
